@@ -1,3 +1,75 @@
+# ESP32 Bluetooth Motion Visualization App
+
+This React Native application connects to ESP32 devices with MPU6050 sensors and provides beautiful visualizations of the accelerometer and gyroscope data.
+
+## Features
+
+- **Device Scanning UI**: Discover and connect to nearby ESP32-MPU6050 devices
+- **Angle Gauge**: Visualize the device tilt angle with threshold indicators
+- **Momentum Gauge**: Display the device momentum based on accelerometer data
+- **Real-time Data Updates**: View sensor data in real-time with smooth animations
+- **Device Connection Management**: Connect and disconnect from devices with a clean UI
+
+## Screenshots
+
+### Device Scanning Screen
+- Discovers nearby Bluetooth devices
+- Highlights compatible ESP32-MPU6050 devices
+- Provides a simple connection interface
+
+### Visualization Screen
+- Clear visualization of sensor data using gauges
+- Real-time display of accelerometer and gyroscope readings
+- Easy disconnect button to return to scanning
+
+## How to Use
+
+1. Launch the app
+2. The app will automatically scan for nearby Bluetooth devices
+3. Compatible ESP32-MPU6050 devices will be highlighted in green
+4. Tap on a device to connect
+5. Once connected, you'll see real-time visualizations of the device's motion
+6. Tap "Disconnect" to return to the scanning screen
+
+## ESP32 Device Requirements
+
+The app is designed to work with ESP32 devices that:
+- Have the device name "ESP32-MPU6050"
+- Use Service UUID: "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+- Use Characteristic UUID: "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+- Send data in the format: "Acc[X,Y,Z]:x,y,z Gyro[X,Y,Z]:x,y,z"
+
+## Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+
+# Install dependencies
+cd Esp32BluetoothApp
+npm install
+
+# For iOS
+cd ios && pod install && cd ..
+npx react-native run-ios
+
+# For Android
+npx react-native run-android
+```
+
+## Permissions
+
+The app requires the following permissions:
+- Bluetooth permissions (automatically requested on iOS)
+- Location permissions on Android (required for Bluetooth scanning)
+
+## Technical Details
+
+- Built with React Native
+- Uses react-native-ble-plx for Bluetooth connectivity
+- Visualizations created with react-native-svg
+- Clean code architecture with separate components for scanning and visualization
+
 This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
 # Getting Started
@@ -66,7 +138,7 @@ This is one way to run your app — you can also build it directly from Android 
 
 Now that you have successfully run the app, let's make changes!
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
 
 When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
 
