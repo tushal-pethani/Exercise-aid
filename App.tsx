@@ -1,130 +1,182 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
+  PermissionsAndroid,
+  Platform,
   Text,
-  useColorScheme,
   View,
+  FlatList,
+  SafeAreaView,
+  StyleSheet,
 } from 'react-native';
+import { BleManager } from 'react-native-ble-plx';
+import base64 from 'base-64';
+import parseSensorData from './utils/parseSensorData.ts';
+import AngleGauge from './components/AngleGauge';
+import MomentumGauge from './components/MomentumGauge';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const CHARACTERISTIC_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
+interface SensorData {
+  acc?: { x: number; y: number; z: number };
+  gyro?: { x: number; y: number; z: number };
 }
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+const App = () => {
+  const manager = new BleManager();
+  const [data, setData] = useState<string[]>([]);
+  const [deviceName, setDeviceName] = useState<string | null>(null);
+  const [latestAcc, setLatestAcc] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [latestGyro, setLatestGyro] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [showRawData, setShowRawData] = useState(false);
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+    }
+
+    const subscription = manager.onStateChange((state) => {
+      if (state === 'PoweredOn') {
+        scanAndConnect();
+        subscription.remove();
+      }
+    }, true);
+
+    return () => {
+      manager.destroy();
+    };
+  }, []);
+
+  const scanAndConnect = () => {
+    manager.startDeviceScan(null, null, async (error, device) => {
+      if (error) {
+        console.warn('Scan error:', error);
+        return;
+      }
+
+      if (device?.name === 'ESP32-MPU6050') {
+        setDeviceName(device.name);
+        manager.stopDeviceScan();
+
+        try {
+          const connectedDevice = await device.connect();
+          await connectedDevice.discoverAllServicesAndCharacteristics();
+          const services = await connectedDevice.services();
+
+          for (const service of services) {
+            if (service.uuid.toLowerCase().includes(SERVICE_UUID)) {
+              const characteristics = await service.characteristics();
+              for (const char of characteristics) {
+                if (char.uuid.toLowerCase().includes(CHARACTERISTIC_UUID)) {
+                  char.monitor((error, characteristic) => {
+                    if (error) {
+                      console.warn('Notification error:', error);
+                      return;
+                    }
+                    const value = characteristic?.value;
+                    if (value) {
+                      const decoded = base64.decode(value);
+                      setData((prev) => [decoded, ...prev.slice(0, 19)]);
+                      const parsed = parseSensorData(decoded) as SensorData;
+                      if (parsed && parsed.acc) setLatestAcc(parsed.acc);
+                      if (parsed && parsed.gyro) setLatestGyro(parsed.gyro);
+                    }
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Connection error:', err);
+        }
+      }
+    });
   };
 
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the recommendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
-
   return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.heading}>
+        {deviceName ? `Connected to ${deviceName}` : 'Scanning for ESP32...'}
+      </Text>
+
+      {/* Angle Gauge Visualization */}
+      <View style={styles.gaugeContainer}>
+        <AngleGauge accData={latestAcc} gyroData={latestGyro} thresholdAngle={90} />
+      </View>
+
+      {/* Momentum Gauge Visualization */}
+      <View style={styles.gaugeContainer}>
+        <MomentumGauge accData={latestAcc} />
+      </View>
+
+      {/* Sensor Data Display */}
+      <View style={styles.dataDisplay}>
+        {latestAcc && (
+          <Text style={styles.sensorText}>
+            Acc → X: {latestAcc.x.toFixed(2)} Y: {latestAcc.y.toFixed(2)} Z: {latestAcc.z.toFixed(2)}
+          </Text>
+        )}
+        {latestGyro && (
+          <Text style={styles.sensorText}>
+            Gyro → X: {latestGyro.x.toFixed(2)} Y: {latestGyro.y.toFixed(2)} Z: {latestGyro.z.toFixed(2)}
+          </Text>
+        )}
+      </View>
+
+      {/* Raw Data Log (Optional) */}
+      {showRawData && (
+        <View style={styles.rawDataContainer}>
+          <FlatList
+            data={data}
+            keyExtractor={(_, index) => index.toString()}
+            renderItem={({ item }) => <Text style={styles.dataText}>{item}</Text>}
+          />
         </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </View>
+      )}
+    </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: { 
+    flex: 1, 
+    backgroundColor: '#000', 
+    padding: 10 
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+  heading: { 
+    color: '#0f0', 
+    fontSize: 20, 
+    marginBottom: 10, 
+    textAlign: 'center' 
   },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
+  gaugeContainer: {
+    marginVertical: 10,
+    alignItems: 'center',
   },
-  highlight: {
-    fontWeight: '700',
+  dataDisplay: {
+    marginVertical: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 5,
+  },
+  sensorText: { 
+    color: '#fff', 
+    fontSize: 16, 
+    marginVertical: 5 
+  },
+  rawDataContainer: {
+    height: 150,
+    marginVertical: 10,
+    padding: 5,
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 5,
+  },
+  dataText: { 
+    color: '#ccc', 
+    fontSize: 12, 
+    marginVertical: 2 
   },
 });
 

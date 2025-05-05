@@ -1,5 +1,5 @@
 {
-  "name": "Esp32BluetoothApp",
+  "name": "esp32bluetoothapp",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -10,8 +10,17 @@
     "test": "jest"
   },
   "dependencies": {
+    "base-64": "^1.0.0",
+    "gl-react": "^5.2.0",
+    "gl-react-native": "^5.2.1",
+    "quaternion": "^2.0.2",
     "react": "19.0.0",
-    "react-native": "0.79.2"
+    "react-native": "0.79.2",
+    "react-native-ble-plx": "^3.5.0",
+    "react-native-gl-model-view": "^1.6.0",
+    "react-native-svg": "^15.11.2",
+    "react-native-webgl": "^0.8.0",
+    "three": "^0.176.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -24,9 +33,11 @@
     "@react-native/eslint-config": "0.79.2",
     "@react-native/metro-config": "0.79.2",
     "@react-native/typescript-config": "0.79.2",
+    "@types/base-64": "^1.0.2",
     "@types/jest": "^29.5.13",
     "@types/react": "^19.0.0",
     "@types/react-test-renderer": "^19.0.0",
+    "@types/three": "^0.176.0",
     "eslint": "^8.19.0",
     "jest": "^29.6.3",
     "prettier": "2.8.8",

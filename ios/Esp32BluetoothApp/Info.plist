@@ -4,6 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Need Bluetooth access to connect to ESP32</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>This app uses Bluetooth to receive data</string>
 	<key>CFBundleDisplayName</key>
 	<string>Esp32BluetoothApp</string>
 	<key>CFBundleExecutable</key>
