@@ -51,14 +51,13 @@ const ExerciseAngleGauge: React.FC<ExerciseAngleGaugeProps> = ({
   // Create tick marks for the gauge
   const createTicks = () => {
     const ticks = [];
+    // Create 36 ticks for the full circle (every 10 degrees)
     for (let i = 0; i < 36; i++) {
       const tickAngle = i * 10;
       const tickRadians = ((tickAngle - 90) * Math.PI) / 180;
       const isMajorTick = i % 3 === 0;
       
-      // Skip ticks in the bottom half of the circle
-      if (tickAngle > 180) continue;
-      
+      // Include all ticks for a full circle
       const innerRadius = isMajorTick ? RADIUS * 0.85 : RADIUS * 0.9;
       const outerRadius = RADIUS;
       
@@ -79,11 +78,17 @@ const ExerciseAngleGauge: React.FC<ExerciseAngleGaugeProps> = ({
         />
       );
       
-      // Add text for major ticks
-      if (isMajorTick && tickAngle <= 180) {
+      // Add text for major ticks - show the full range from -180 to +180
+      if (isMajorTick) {
         const textRadius = RADIUS * 1.1;
         const textX = CENTER_X + textRadius * Math.cos(tickRadians);
         const textY = CENTER_Y + textRadius * Math.sin(tickRadians);
+        
+        // Adjust the displayed angle to show -180 to +180 range
+        let displayAngle = tickAngle;
+        if (displayAngle > 180) {
+          displayAngle = displayAngle - 360;
+        }
         
         ticks.push(
           <SvgText
@@ -95,7 +100,7 @@ const ExerciseAngleGauge: React.FC<ExerciseAngleGaugeProps> = ({
             textAnchor="middle"
             alignmentBaseline="middle"
           >
-            {tickAngle}°
+            {displayAngle}°
           </SvgText>
         );
       }
@@ -106,12 +111,34 @@ const ExerciseAngleGauge: React.FC<ExerciseAngleGaugeProps> = ({
   return (
     <View style={styles.container}>
       <Svg width={GAUGE_SIZE} height={GAUGE_SIZE}>
-        {/* Semi-circular gauge background */}
-        <Path
-          d={`M ${CENTER_X - RADIUS} ${CENTER_Y} A ${RADIUS} ${RADIUS} 0 0 1 ${CENTER_X + RADIUS} ${CENTER_Y}`}
+        {/* Full circular gauge background */}
+        <Circle
+          cx={CENTER_X}
+          cy={CENTER_Y}
+          r={RADIUS}
           stroke="white"
           strokeWidth="2"
           fill="transparent"
+        />
+        
+        {/* Horizontal and vertical orientation lines */}
+        <Line
+          x1={CENTER_X - RADIUS}
+          y1={CENTER_Y}
+          x2={CENTER_X + RADIUS}
+          y2={CENTER_Y}
+          stroke="#333"
+          strokeWidth="1"
+          strokeDasharray="5,5"
+        />
+        <Line
+          x1={CENTER_X}
+          y1={CENTER_Y - RADIUS}
+          x2={CENTER_X}
+          y2={CENTER_Y + RADIUS}
+          stroke="#333"
+          strokeWidth="1"
+          strokeDasharray="5,5"
         />
         
         {/* Tick marks */}

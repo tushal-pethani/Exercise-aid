@@ -8,6 +8,8 @@ const parseSensorData = (raw: string): {
   gyro?: {x: number, y: number, z: number} 
 } => {
   try {
+    console.log('Raw sensor data:', raw);
+    
     const data: { 
       acc?: {x: number, y: number, z: number}, 
       gyro?: {x: number, y: number, z: number} 
@@ -22,6 +24,9 @@ const parseSensorData = (raw: string): {
         y: parseFloat(accMatch[2]),
         z: parseFloat(accMatch[3]),
       };
+      console.log('Parsed accelerometer data:', data.acc);
+    } else {
+      console.warn('Failed to match accelerometer data pattern in string:', raw);
     }
 
     if (gyroMatch) {
@@ -30,11 +35,14 @@ const parseSensorData = (raw: string): {
         y: parseFloat(gyroMatch[2]),
         z: parseFloat(gyroMatch[3]),
       };
+      console.log('Parsed gyroscope data:', data.gyro);
+    } else {
+      console.warn('Failed to match gyroscope data pattern in string:', raw);
     }
 
     return data;
   } catch (err) {
-    console.warn('Failed to parse sensor data:', err);
+    console.warn('Failed to parse sensor data:', err, 'Raw data:', raw);
     return {};
   }
 };

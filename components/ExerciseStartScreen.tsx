@@ -7,6 +7,7 @@ import {
   Image,
   SafeAreaView,
   Dimensions,
+  ScrollView,
 } from 'react-native';
 import { Device } from 'react-native-ble-plx';
 
@@ -29,45 +30,47 @@ const ExerciseStartScreen: React.FC<ExerciseStartScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Lateral Raise Exercise</Text>
-        <Text style={styles.subtitle}>Connected to: {device.name || 'Unknown Device'}</Text>
-      </View>
-      
-      <View style={styles.instructionsContainer}>
-        <View style={styles.instructionBox}>
-          <Text style={styles.instructionTitle}>Instructions:</Text>
-          <Text style={styles.instructionText}>1. Place the device on your shoulder</Text>
-          <Text style={styles.instructionText}>2. Stand with your feet shoulder-width apart</Text>
-          <Text style={styles.instructionText}>3. Hold your arms by your sides</Text>
-          <Text style={styles.instructionText}>4. Raise your arms to the sides until they're parallel to the floor</Text>
-          <Text style={styles.instructionText}>5. Aim for a 100° angle at the top</Text>
-          <Text style={styles.instructionText}>6. Lower your arms slowly with control</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Lateral Raise Exercise</Text>
+          <Text style={styles.subtitle}>Connected to: {device.name || 'Unknown Device'}</Text>
         </View>
-      </View>
-      
-      <View style={styles.devicePlacementContainer}>
-        <Text style={styles.placementTitle}>Device Placement:</Text>
-        <View style={styles.placementImageContainer}>
-          <View style={styles.shoulderIndicator}>
-            <Text style={styles.shoulderText}>Place device here</Text>
+        
+        <View style={styles.instructionsContainer}>
+          <View style={styles.instructionBox}>
+            <Text style={styles.instructionTitle}>Instructions:</Text>
+            <Text style={styles.instructionText}>1. Place the device on your shoulder</Text>
+            <Text style={styles.instructionText}>2. Stand with your feet shoulder-width apart</Text>
+            <Text style={styles.instructionText}>3. Hold your arms by your sides</Text>
+            <Text style={styles.instructionText}>4. Raise your arms to the sides until they're parallel to the floor</Text>
+            <Text style={styles.instructionText}>5. Aim for a 100° angle at the top</Text>
+            <Text style={styles.instructionText}>6. Lower your arms slowly with control</Text>
           </View>
         </View>
-      </View>
-      
-      <View style={styles.thresholdInfoContainer}>
-        <Text style={styles.thresholdTitle}>Exercise Parameters:</Text>
-        <Text style={styles.thresholdText}>• Target angle: 100 degrees</Text>
-        <Text style={styles.thresholdText}>• Control momentum for best results</Text>
-        <Text style={styles.thresholdText}>• Complete exercise with full range of motion</Text>
-      </View>
-      
-      <TouchableOpacity 
-        style={styles.startButton}
-        onPress={handleStartExercise}
-      >
-        <Text style={styles.startButtonText}>Start Exercise</Text>
-      </TouchableOpacity>
+        
+        <View style={styles.devicePlacementContainer}>
+          <Text style={styles.placementTitle}>Device Placement:</Text>
+          <View style={styles.placementImageContainer}>
+            <View style={styles.shoulderIndicator}>
+              <Text style={styles.shoulderText}>Place device here</Text>
+            </View>
+          </View>
+        </View>
+        
+        <View style={styles.thresholdInfoContainer}>
+          <Text style={styles.thresholdTitle}>Exercise Parameters:</Text>
+          <Text style={styles.thresholdText}>• Target angle: 100 degrees</Text>
+          <Text style={styles.thresholdText}>• Control momentum for best results</Text>
+          <Text style={styles.thresholdText}>• Complete exercise with full range of motion</Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.startButton}
+          onPress={handleStartExercise}
+        >
+          <Text style={styles.startButtonText}>Start Exercise</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -76,7 +79,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#121212',
+  },
+  scrollContent: {
     padding: 16,
+    paddingBottom: 100, // Add extra padding at the bottom to ensure button is visible
   },
   header: {
     alignItems: 'center',
@@ -169,6 +175,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
+    marginBottom: 30, // Add bottom margin to ensure visibility
   },
   startButtonText: {
     color: '#FFFFFF',
