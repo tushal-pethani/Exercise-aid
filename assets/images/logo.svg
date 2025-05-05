@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="250" fill="#EFEDE2" stroke="#32AD5E" stroke-width="12" />
+  
+  <!-- Outer leaf shape -->
+  <path d="M256 120 C 160 160, 140 260, 180 350 C 220 440, 320 410, 370 340 C 420 270, 390 180, 330 140 C 270 100, 256 120, 256 120 Z" fill="#C4DB93" stroke="#32AD5E" stroke-width="8" />
+  
+  <!-- Inner details - stylized P -->
+  <path d="M210 180 L210 340 L240 340 L240 280 L280 280 C 320 280, 340 240, 340 230 C 340 180, 310 180, 280 180 Z" fill="#32AD5E" />
+  <path d="M240 210 L240 250 L270 250 C 290 250, 290 210, 270 210 Z" fill="#EFEDE2" />
+  
+  <!-- Motion lines -->
+  <path d="M170 310 C 210 320, 250 300, 280 290" stroke="#000000" stroke-width="8" fill="none" stroke-linecap="round" />
+  <path d="M180 270 C 220 280, 260 260, 290 250" stroke="#000000" stroke-width="8" fill="none" stroke-linecap="round" />
+  <path d="M190 230 C 230 240, 270 220, 300 210" stroke="#000000" stroke-width="8" fill="none" stroke-linecap="round" />
+</svg> 

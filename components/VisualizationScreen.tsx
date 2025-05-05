@@ -15,8 +15,8 @@ import AngleGauge from './AngleGauge';
 import MomentumGauge from './MomentumGauge';
 
 interface VisualizationScreenProps {
-  device: Device;
-  onDisconnect: () => void;
+  route: { params: { device: Device } };
+  navigation: any;
 }
 
 const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
@@ -27,11 +27,16 @@ interface SensorData {
   gyro?: { x: number; y: number; z: number };
 }
 
-const VisualizationScreen: React.FC<VisualizationScreenProps> = ({ device, onDisconnect }) => {
+const VisualizationScreen: React.FC<VisualizationScreenProps> = ({ route, navigation }) => {
+  const { device } = route.params;
   const [latestAcc, setLatestAcc] = useState<{ x: number; y: number; z: number } | null>(null);
   const [latestGyro, setLatestGyro] = useState<{ x: number; y: number; z: number } | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [manager] = useState(() => new BleManager());
+
+  const handleDisconnect = () => {
+    navigation.goBack();
+  };
 
   useEffect(() => {
     let unmounted = false;
@@ -95,7 +100,7 @@ const VisualizationScreen: React.FC<VisualizationScreenProps> = ({ device, onDis
           Alert.alert(
             'Connection Error',
             'Failed to connect to the device. Please try again.',
-            [{ text: 'OK', onPress: onDisconnect }]
+            [{ text: 'OK', onPress: handleDisconnect }]
           );
         }
       }
@@ -118,7 +123,7 @@ const VisualizationScreen: React.FC<VisualizationScreenProps> = ({ device, onDis
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>ESP32 Motion Visualization</Text>
-        <TouchableOpacity style={styles.disconnectButton} onPress={onDisconnect}>
+        <TouchableOpacity style={styles.disconnectButton} onPress={handleDisconnect}>
           <Text style={styles.disconnectText}>Disconnect</Text>
         </TouchableOpacity>
       </View>

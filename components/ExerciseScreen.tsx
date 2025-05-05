@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Vibration,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { Device } from 'react-native-ble-plx';
 import { BleManager } from 'react-native-ble-plx';
@@ -14,10 +15,11 @@ import base64 from 'base-64';
 import parseSensorData from '../utils/parseSensorData';
 import ExerciseAngleGauge from './ExerciseAngleGauge';
 import ExerciseMomentumGauge from './ExerciseMomentumGauge';
+import { COLORS } from '../utils/theme';
 
 interface ExerciseScreenProps {
-  device: Device;
-  onFinishExercise: () => void;
+  route: { params: { device: Device } };
+  navigation: any;
 }
 
 const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
@@ -36,7 +38,9 @@ interface SensorData {
 
 const { width } = Dimensions.get('window');
 
-const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ device, onFinishExercise }) => {
+const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) => {
+  const { device } = route.params;
+  
   // Sensor data states
   const [latestAcc, setLatestAcc] = useState<{ x: number; y: number; z: number } | null>(null);
   const [latestGyro, setLatestGyro] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -50,6 +54,10 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ device, onFinishExercis
   
   // Track if we're connected
   const [isConnected, setIsConnected] = useState(true);
+  
+  // Calibration offset for angle
+  const [calibrationOffset, setCalibrationOffset] = useState(0);
+  const [isCalibrating, setIsCalibrating] = useState(false);
   
   // Use refs to track the exercise state over time
   const repInProgressRef = useRef(false);
@@ -129,6 +137,38 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ device, onFinishExercis
     };
   }, [device]);
   
+  // Handle calibration
+  const calibrateAngle = () => {
+    if (!latestAcc) {
+      Alert.alert('Error', 'Sensor data not available for calibration');
+      return;
+    }
+    
+    setIsCalibrating(true);
+    
+    // Calculate current angle to use as offset
+    const x = latestAcc.x;
+    const y = latestAcc.y;
+    const z = latestAcc.z;
+    
+    const pitch = Math.atan2(y, Math.sqrt(x * x + z * z)) * (180 / Math.PI);
+    const roll = Math.atan2(-x, z) * (180 / Math.PI);
+    
+    const currentRawAngle = Math.abs(roll);
+    setCalibrationOffset(currentRawAngle);
+    
+    // Reset exercise tracking
+    repInProgressRef.current = false;
+    maxAngleReachedRef.current = 0;
+    setRepCount(0);
+    setExerciseState('rest');
+    setFeedback('Calibrated! Start your exercise.');
+    
+    setTimeout(() => {
+      setIsCalibrating(false);
+    }, 1000);
+  };
+  
   // Process sensor data to calculate angle and momentum
   useEffect(() => {
     if (latestAcc) {
@@ -143,24 +183,25 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ device, onFinishExercis
       const pitch = Math.atan2(y, Math.sqrt(x * x + z * z)) * (180 / Math.PI);
       const roll = Math.atan2(-x, z) * (180 / Math.PI);
       
-      // Use the larger of pitch or roll for lateral raises
-      const angle = Math.abs(roll);
-      setCurrentAngle(angle);
+      // Use the larger of pitch or roll for lateral raises and apply calibration
+      const rawAngle = Math.abs(roll);
+      const calibratedAngle = Math.max(0, rawAngle - calibrationOffset);
+      setCurrentAngle(calibratedAngle);
       
       // Track exercise state
-      if (angle > REP_THRESHOLD && !repInProgressRef.current) {
+      if (calibratedAngle > REP_THRESHOLD && !repInProgressRef.current) {
         // Started a new rep
         repInProgressRef.current = true;
         setExerciseState('raising');
-        maxAngleReachedRef.current = angle;
-      } else if (angle > maxAngleReachedRef.current && repInProgressRef.current) {
+        maxAngleReachedRef.current = calibratedAngle;
+      } else if (calibratedAngle > maxAngleReachedRef.current && repInProgressRef.current) {
         // Continuing to raise
-        maxAngleReachedRef.current = angle;
+        maxAngleReachedRef.current = calibratedAngle;
         setExerciseState('raising');
-      } else if (angle < maxAngleReachedRef.current - 15 && repInProgressRef.current) {
+      } else if (calibratedAngle < maxAngleReachedRef.current - 15 && repInProgressRef.current) {
         // Started lowering
         setExerciseState('lowering');
-      } else if (angle < REST_THRESHOLD && repInProgressRef.current) {
+      } else if (calibratedAngle < REST_THRESHOLD && repInProgressRef.current) {
         // Completed a rep
         repInProgressRef.current = false;
         setRepCount(prev => prev + 1);
@@ -198,68 +239,51 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ device, onFinishExercis
         latestGyro.z * latestGyro.z
       );
       
-      // Combine both factors, with more weight on gyroscope for momentum
-      const momentum = (gyroMagnitude * 0.7 + accMagnitude * 0.3) * 10;
-      
-      // Apply some smoothing
-      setCurrentMomentum(prev => prev * 0.7 + momentum * 0.3);
+      // Combine for momentum (weighted more toward gyro for rotational movement)
+      const momentum = Math.min(100, (gyroMagnitude * 0.7 + accMagnitude * 0.3) * 10);
+      setCurrentMomentum(momentum);
     }
-  }, [latestAcc, latestGyro]);
+  }, [latestAcc, latestGyro, calibrationOffset]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Lateral Raise Exercise</Text>
-        {!isConnected && (
-          <Text style={styles.connectionWarning}>⚠️ Connection lost</Text>
-        )}
-        <TouchableOpacity 
-          style={styles.finishButton}
-          onPress={onFinishExercise}
-        >
-          <Text style={styles.finishButtonText}>Finish</Text>
-        </TouchableOpacity>
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerText}>Exercise Session</Text>
+        {!isConnected && <Text style={styles.connectionError}>Device Disconnected</Text>}
       </View>
       
-      <View style={styles.repCountContainer}>
-        <Text style={styles.repCountLabel}>Repetitions</Text>
-        <Text style={styles.repCount}>{repCount}</Text>
-        {feedback && (
-          <Text style={styles.feedback}>{feedback}</Text>
-        )}
-      </View>
-      
-      <View style={styles.gaugeContainer}>
-        <Text style={styles.gaugeTitle}>Arm Angle</Text>
+      <View style={styles.gaugesContainer}>
         <ExerciseAngleGauge 
+          style={styles.gauge} 
           currentAngle={currentAngle} 
-          thresholdAngle={TARGET_ANGLE}
-          warningThreshold={TARGET_ANGLE - 10}
+          targetAngle={TARGET_ANGLE} 
         />
-      </View>
-      
-      <View style={styles.gaugeContainer}>
-        <Text style={styles.gaugeTitle}>Movement Speed</Text>
         <ExerciseMomentumGauge 
-          momentum={currentMomentum}
-          maxMomentum={MOMENTUM_THRESHOLD * 1.5}
+          style={styles.gauge} 
+          currentMomentum={currentMomentum} 
+          threshold={MOMENTUM_THRESHOLD} 
         />
       </View>
       
-      <View style={styles.statusContainer}>
-        <Text style={styles.statusTitle}>Status:</Text>
-        <Text style={[
-          styles.statusText,
-          exerciseState === 'raising' && styles.raisingText,
-          exerciseState === 'lowering' && styles.loweringText,
-          exerciseState === 'rest' && styles.restText,
-        ]}>
-          {exerciseState === 'raising' 
-            ? 'RAISING - Keep going!' 
-            : exerciseState === 'lowering' 
-              ? 'LOWERING - Control the movement' 
-              : 'REST - Prepare for next rep'}
-        </Text>
+      <View style={styles.feedbackContainer}>
+        <Text style={styles.repCountText}>Repetitions: {repCount}</Text>
+        <Text style={styles.feedbackText}>{feedback}</Text>
+      </View>
+      
+      <View style={styles.buttonsContainer}>
+        <TouchableOpacity
+          style={[styles.button, styles.calibrateButton, isCalibrating && styles.disabledButton]}
+          onPress={calibrateAngle}
+          disabled={isCalibrating}
+        >
+          <Text style={styles.buttonText}>
+            {isCalibrating ? 'Calibrating...' : 'Calibrate'}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
+          <Text style={styles.buttonText}>Finish Exercise</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -268,98 +292,74 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ device, onFinishExercis
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#F5F5F5',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  headerContainer: {
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#1A1A1A',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    backgroundColor: '#FFFFFF',
   },
-  title: {
+  headerText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#4CAF50',
-    flex: 1,
   },
-  connectionWarning: {
-    color: '#FF0000',
-    marginHorizontal: 8,
+  connectionError: {
+    fontSize: 14,
+    color: 'red',
+    marginTop: 4,
   },
-  finishButton: {
-    backgroundColor: '#333333',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+  gaugesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 20,
   },
-  finishButtonText: {
-    color: '#FFFFFF',
+  gauge: {
+    width: width / 2 - 30,
+    height: width / 2 - 30,
+  },
+  feedbackContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
+    paddingHorizontal: 20,
+  },
+  repCountText: {
+    fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 12,
   },
-  repCountContainer: {
+  feedbackText: {
+    fontSize: 18,
+    textAlign: 'center',
+    color: '#333',
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    marginTop: 'auto',
+    marginBottom: 30,
+  },
+  button: {
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    backgroundColor: '#1A1A1A',
-    marginBottom: 16,
+    minWidth: 140,
   },
-  repCountLabel: {
-    fontSize: 16,
-    color: '#AAAAAA',
-    marginBottom: 4,
+  calibrateButton: {
+    backgroundColor: COLORS.primary,
   },
-  repCount: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#4CAF50',
+  disabledButton: {
+    opacity: 0.6,
   },
-  feedback: {
-    fontSize: 14,
-    color: '#DDDDDD',
-    marginTop: 8,
-  },
-  gaugeContainer: {
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  gaugeTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    padding: 16,
-    borderRadius: 8,
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  statusTitle: {
+  buttonText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginRight: 8,
-  },
-  statusText: {
-    fontSize: 16,
-    color: '#AAAAAA',
-    flex: 1,
-  },
-  raisingText: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
-  },
-  loweringText: {
-    color: '#2196F3',
-    fontWeight: 'bold',
-  },
-  restText: {
-    color: '#FFC107',
-    fontWeight: 'bold',
+    color: '#FFF',
   },
 });
 

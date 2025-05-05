@@ -8,23 +8,30 @@ import {
   SafeAreaView,
   Dimensions,
 } from 'react-native';
+import { Device } from 'react-native-ble-plx';
 
 interface ExerciseStartScreenProps {
-  onStartExercise: () => void;
-  deviceName: string;
+  route: { params: { device: Device } };
+  navigation: any;
 }
 
 const { width } = Dimensions.get('window');
 
 const ExerciseStartScreen: React.FC<ExerciseStartScreenProps> = ({ 
-  onStartExercise,
-  deviceName
+  route,
+  navigation
 }) => {
+  const { device } = route.params;
+  
+  const handleStartExercise = () => {
+    navigation.navigate('Exercise', { device });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Lateral Raise Exercise</Text>
-        <Text style={styles.subtitle}>Connected to: {deviceName}</Text>
+        <Text style={styles.subtitle}>Connected to: {device.name || 'Unknown Device'}</Text>
       </View>
       
       <View style={styles.instructionsContainer}>
@@ -57,7 +64,7 @@ const ExerciseStartScreen: React.FC<ExerciseStartScreenProps> = ({
       
       <TouchableOpacity 
         style={styles.startButton}
-        onPress={onStartExercise}
+        onPress={handleStartExercise}
       >
         <Text style={styles.startButtonText}>Start Exercise</Text>
       </TouchableOpacity>
