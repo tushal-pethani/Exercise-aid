@@ -100,8 +100,9 @@ const DrawerNavigator = () => {
           marginLeft: 10,
           fontSize: SIZES.medium,
         },
-        safeAreaInsets: { top: 0 },
-        headerStatusBarHeight: 0,
+        drawerStyle: {
+          paddingTop: SIZES.padding * 2, // Add padding to the drawer
+        },
       }}
     >
       {isClient ? (

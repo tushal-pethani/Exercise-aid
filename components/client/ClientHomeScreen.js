@@ -152,9 +152,7 @@ const ClientHomeScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar backgroundColor={COLORS.primary} barStyle="dark-content" />
-      
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Custom Header with Actions */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -310,7 +308,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SIZES.padding,
-    paddingTop: SIZES.paddingSmall,
+    paddingTop: SIZES.padding * 3,
     paddingBottom: SIZES.paddingSmall,
     backgroundColor: COLORS.primary,
   },

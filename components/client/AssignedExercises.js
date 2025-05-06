@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: COLORS.primary,
-    paddingTop: SIZES.padding * 1.5,
+    paddingTop: SIZES.padding * 3,
     paddingBottom: SIZES.padding,
     paddingHorizontal: SIZES.padding,
     flexDirection: 'row',

@@ -15,7 +15,11 @@ const App = () => {
   return (
     <AuthProvider>
       <BluetoothProvider>
-      <StatusBar backgroundColor={COLORS.primary} barStyle="dark-content" />
+      <StatusBar 
+        backgroundColor="transparent" 
+        barStyle="light-content" 
+        translucent={true} 
+      />
       <AppNavigator />
       </BluetoothProvider>
     </AuthProvider>

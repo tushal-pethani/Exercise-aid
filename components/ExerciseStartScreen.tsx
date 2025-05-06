@@ -128,14 +128,6 @@ const ExerciseStartScreen: React.FC<ExerciseStartScreenProps> = ({
           </View>
         </View>
         
-        <View style={styles.devicePlacementContainer}>
-          <Text style={styles.placementTitle}>Device Placement:</Text>
-          <View style={styles.placementImageContainer}>
-            <View style={styles.shoulderIndicator}>
-              <Text style={styles.shoulderText}>Place device here</Text>
-            </View>
-          </View>
-        </View>
         
         <View style={styles.thresholdInfoContainer}>
           <Text style={styles.thresholdTitle}>Exercise Parameters:</Text>

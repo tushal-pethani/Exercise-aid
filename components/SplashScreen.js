@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Image } from 'react-native';
 import { COLORS, SIZES } from '../utils/theme';
-
 const SplashScreen = ({ onFinish }) => {
   const fadeAnim = new Animated.Value(0);
   const scaleAnim = new Animated.Value(0.8);
@@ -40,11 +39,15 @@ const SplashScreen = ({ onFinish }) => {
           },
         ]}
       >
-        {/* Logo Placeholder */}
+        {/* App Icon Image */}
         <View style={styles.logoPlaceholder}>
-          <Text style={styles.logoText}>P</Text>
+          <Image
+            source={require('../assets/images/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
-        <Text style={styles.title}>PhysioConnect</Text>
+        <Text style={styles.title}>Exercise Aid</Text>
         <Text style={styles.subtitle}>Connecting Therapists & Patients</Text>
       </Animated.View>
     </View>
@@ -71,11 +74,11 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.padding,
     borderWidth: 8,
     borderColor: COLORS.secondary,
+    overflow: 'hidden',
   },
-  logoText: {
-    fontSize: 100,
-    fontWeight: 'bold',
-    color: COLORS.secondary,
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     fontSize: SIZES.xxLarge,
