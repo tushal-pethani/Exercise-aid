@@ -10,11 +10,70 @@ import {
   ScrollView,
 } from 'react-native';
 import { Device } from 'react-native-ble-plx';
+import { useBluetooth } from '../context/BluetoothContext';
+
+interface ExerciseConfigType {
+  bodyPart: string;
+  exercise: string;
+  sets: number;
+  reps: number;
+  targetAngle: number;
+  restTime: number;
+}
 
 interface ExerciseStartScreenProps {
-  route: { params: { device: Device } };
+  route: { 
+    params: { 
+      device?: Device;
+      exerciseConfig?: ExerciseConfigType;
+    } 
+  };
   navigation: any;
 }
+
+// Map exercise IDs to exercise names
+const exerciseNames: { [key: string]: string } = {
+  lateral_raise: 'Lateral Raise',
+  side_raise: 'Side Raise',
+  front_raise: 'Front Raise',
+  bicep_curl: 'Bicep Curl',
+  hammer_curl: 'Hammer Curl',
+  squat: 'Squat',
+  calf_raise: 'Calf Raise',
+  deadlift: 'Deadlift',
+};
+
+// Map body part IDs to placement instructions
+const bodyPartInstructions: { [key: string]: string[] } = {
+  shoulder: [
+    'Place the device on your shoulder',
+    'Stand with your feet shoulder-width apart',
+    'Hold your arms by your sides',
+    'Raise your arms to the sides until they reach target angle',
+    'Lower your arms slowly with control',
+  ],
+  arm: [
+    'Place the device on your forearm',
+    'Stand with your feet shoulder-width apart',
+    'Keep your elbows close to your body',
+    'Curl your arms up to the target angle',
+    'Lower your arms slowly with control',
+  ],
+  leg: [
+    'Place the device on your thigh',
+    'Stand with your feet shoulder-width apart',
+    'Keep your back straight',
+    'Bend your knees to the target angle',
+    'Return to standing position with control',
+  ],
+  back: [
+    'Place the device on your lower back',
+    'Stand with your feet hip-width apart',
+    'Bend at the hips with slight knee bend',
+    'Lower until you reach target angle',
+    'Return to standing position with a straight back',
+  ],
+};
 
 const { width } = Dimensions.get('window');
 
@@ -22,29 +81,50 @@ const ExerciseStartScreen: React.FC<ExerciseStartScreenProps> = ({
   route,
   navigation
 }) => {
-  const { device } = route.params;
+  const { deviceInfo } = useBluetooth();
+  const exerciseConfig = route.params?.exerciseConfig || {
+    bodyPart: 'shoulder',
+    exercise: 'lateral_raise',
+    sets: 3,
+    reps: 10,
+    targetAngle: 90,
+    restTime: 60
+  };
+  
+  // Get the exercise name from the exercise ID
+  const exerciseName = exerciseNames[exerciseConfig.exercise] || 'Custom Exercise';
+  
+  // Get instructions for the selected body part
+  const instructions = bodyPartInstructions[exerciseConfig.bodyPart] || [
+    'Place the device appropriately',
+    'Stand with proper form',
+    'Perform the movement with control',
+    'Maintain good posture throughout',
+    'Complete the full range of motion',
+  ];
   
   const handleStartExercise = () => {
-    navigation.navigate('Exercise', { device });
+    navigation.navigate('Exercise', { exerciseConfig });
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.title}>Lateral Raise Exercise</Text>
-          <Text style={styles.subtitle}>Connected to: {device.name || 'Unknown Device'}</Text>
+          <Text style={styles.title}>{exerciseName}</Text>
+          <Text style={styles.subtitle}>
+            Connected to: {deviceInfo?.name || 'No device connected'}
+          </Text>
         </View>
         
         <View style={styles.instructionsContainer}>
           <View style={styles.instructionBox}>
             <Text style={styles.instructionTitle}>Instructions:</Text>
-            <Text style={styles.instructionText}>1. Place the device on your shoulder</Text>
-            <Text style={styles.instructionText}>2. Stand with your feet shoulder-width apart</Text>
-            <Text style={styles.instructionText}>3. Hold your arms by your sides</Text>
-            <Text style={styles.instructionText}>4. Raise your arms to the sides until they're parallel to the floor</Text>
-            <Text style={styles.instructionText}>5. Aim for a 100° angle at the top</Text>
-            <Text style={styles.instructionText}>6. Lower your arms slowly with control</Text>
+            {instructions.map((instruction, index) => (
+              <Text key={index} style={styles.instructionText}>
+                {index + 1}. {instruction}
+              </Text>
+            ))}
           </View>
         </View>
         
@@ -59,8 +139,10 @@ const ExerciseStartScreen: React.FC<ExerciseStartScreenProps> = ({
         
         <View style={styles.thresholdInfoContainer}>
           <Text style={styles.thresholdTitle}>Exercise Parameters:</Text>
-          <Text style={styles.thresholdText}>• Target angle: 100 degrees</Text>
-          <Text style={styles.thresholdText}>• Control momentum for best results</Text>
+          <Text style={styles.thresholdText}>• Sets: {exerciseConfig.sets}</Text>
+          <Text style={styles.thresholdText}>• Reps per set: {exerciseConfig.reps}</Text>
+          <Text style={styles.thresholdText}>• Target angle: {exerciseConfig.targetAngle} degrees</Text>
+          <Text style={styles.thresholdText}>• Rest time: {exerciseConfig.restTime} seconds</Text>
           <Text style={styles.thresholdText}>• Complete exercise with full range of motion</Text>
         </View>
         

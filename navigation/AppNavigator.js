@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-// We'll add back the import once the linking is fixed
-// import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import SplashScreen from '../components/SplashScreen';
 import LoginScreen from '../components/auth/LoginScreen';
 import RegisterScreen from '../components/auth/RegisterScreen';
@@ -12,13 +10,21 @@ import DeviceScanScreen from '../components/DeviceScanScreen';
 import ExerciseStartScreen from '../components/ExerciseStartScreen';
 import ExerciseScreen from '../components/ExerciseScreen';
 import VisualizationScreen from '../components/VisualizationScreen';
-import RequestsList from '../components/requests/RequestsList';
 import SendRequestScreen from '../components/requests/SendRequestScreen';
+import SearchPhysioScreen from '../components/requests/SearchPhysioScreen';
+import SearchClientScreen from '../components/physio/SearchClientScreen';
+import RequestsScreen from '../components/requests/RequestsScreen';
+import PhysioRequestsScreen from '../components/physio/PhysioRequestsScreen';
+import DrawerNavigator from './DrawerNavigator';
+import CreateExercise from '../components/physio/CreateExercise';
+import ManageClients from '../components/physio/ManageClients';
+import ClientProfileScreen from '../components/physio/ClientProfileScreen';
+import AssignExerciseScreen from '../components/physio/AssignExerciseScreen';
+import ChatScreen from '../components/chat/ChatScreen';
 import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../utils/theme';
 
 const Stack = createStackNavigator();
-const Tab = createBottomTabNavigator();
 
 // Auth Stack (Login/Register)
 const AuthStack = () => (
@@ -34,117 +40,126 @@ const AuthStack = () => (
 
 // Exercise Stack
 const ExerciseStack = () => (
-  <Stack.Navigator>
+  <Stack.Navigator
+    screenOptions={{
+      headerShown: false,
+      cardStyle: { backgroundColor: COLORS.background }
+    }}
+  >
     <Stack.Screen 
       name="DeviceScan" 
-      options={{ 
-        title: 'Connect Device',
-        headerStyle: {
-          backgroundColor: COLORS.primary,
-        },
-        headerTintColor: COLORS.black,
-      }}
-    >
-      {props => <DeviceScanScreen {...props} onDeviceConnect={(device) => {
-        props.navigation.navigate('ExerciseStart', { device });
-      }} />}
-    </Stack.Screen>
+      component={DeviceScanScreen}
+    />
     <Stack.Screen 
       name="ExerciseStart" 
       component={ExerciseStartScreen}
-      options={{ 
-        title: 'Prepare Exercise',
-        headerStyle: {
-          backgroundColor: COLORS.primary,
-        },
-        headerTintColor: COLORS.black,
-      }}
     />
     <Stack.Screen 
       name="Exercise" 
       component={ExerciseScreen}
-      options={{ 
-        title: 'Exercise',
-        headerShown: false,
-      }}
     />
     <Stack.Screen 
       name="Visualization" 
       component={VisualizationScreen}
-      options={{ 
-        title: '3D Visualization',
-        headerStyle: {
-          backgroundColor: COLORS.primary,
-        },
-        headerTintColor: COLORS.black,
-      }}
     />
   </Stack.Navigator>
 );
 
-// Requests Stack
-const RequestsStack = () => (
-  <Stack.Navigator>
-    <Stack.Screen 
-      name="RequestsList" 
-      component={RequestsList}
-      options={{ 
-        title: 'Connection Requests',
-        headerStyle: {
-          backgroundColor: COLORS.primary,
-        },
-        headerTintColor: COLORS.black,
-      }}
-    />
+// Main Stack (including Drawer and other screens)
+const MainStack = () => (
+  <Stack.Navigator
+    screenOptions={{
+      headerShown: false,
+    }}
+  >
+    <Stack.Screen name="DrawerNavigator" component={DrawerNavigator} />
+    <Stack.Screen name="ExerciseStack" component={ExerciseStack} />
     <Stack.Screen 
       name="SendRequest" 
       component={SendRequestScreen}
       options={{ 
+        headerShown: true,
         title: 'Find Connections',
         headerStyle: {
           backgroundColor: COLORS.primary,
         },
-        headerTintColor: COLORS.black,
+        headerTintColor: COLORS.text,
+      }}
+    />
+    <Stack.Screen 
+      name="SearchPhysio" 
+      component={SearchPhysioScreen}
+      options={{ 
+        headerShown: false,
+      }}
+    />
+    <Stack.Screen 
+      name="SearchClient" 
+      component={SearchClientScreen}
+      options={{ 
+        headerShown: false,
+      }}
+    />
+    <Stack.Screen 
+      name="Requests" 
+      component={RequestsScreen}
+      options={{ 
+        headerShown: false,
+      }}
+    />
+    <Stack.Screen 
+      name="PhysioRequests" 
+      component={PhysioRequestsScreen}
+      options={{ 
+        headerShown: false,
+      }}
+    />
+    <Stack.Screen 
+      name="CreateExercise" 
+      component={CreateExercise}
+      options={{ 
+        headerShown: true,
+        title: 'Create Exercise',
+        headerStyle: {
+          backgroundColor: COLORS.primary,
+        },
+        headerTintColor: COLORS.text,
+      }}
+    />
+    <Stack.Screen 
+      name="ManageClients" 
+      component={ManageClients}
+      options={{ 
+        headerShown: true,
+        title: 'Manage Clients',
+        headerStyle: {
+          backgroundColor: COLORS.primary,
+        },
+        headerTintColor: COLORS.text,
+      }}
+    />
+    <Stack.Screen 
+      name="ClientProfile" 
+      component={ClientProfileScreen}
+      options={{ 
+        headerShown: false,
+      }}
+    />
+    <Stack.Screen 
+      name="AssignExercise" 
+      component={AssignExerciseScreen}
+      options={{ 
+        headerShown: false,
+      }}
+    />
+    <Stack.Screen 
+      name="Chat" 
+      component={ChatScreen}
+      options={{ 
+        headerShown: false,
       }}
     />
   </Stack.Navigator>
-);
-
-// Main Tab Navigator
-const MainTabs = () => (
-  <Tab.Navigator
-    screenOptions={{
-      tabBarActiveTintColor: COLORS.secondary,
-      tabBarInactiveTintColor: COLORS.inactive,
-      tabBarStyle: {
-        backgroundColor: COLORS.white,
-        borderTopColor: '#E0E0E0',
-        paddingTop: 5,
-      },
-      headerShown: false,
-    }}
-  >
-    <Tab.Screen
-      name="ExerciseTab"
-      component={ExerciseStack}
-      options={{
-        tabBarLabel: 'Exercise',
-        tabBarIcon: ({ color }) => (
-          <Text style={{ color, fontSize: 20 }}>💪</Text>
-        ),
-      }}
-    />
-    <Tab.Screen
-      name="RequestsTab"
-      component={RequestsStack}
-      options={{
-        tabBarLabel: 'Connections',
-        tabBarIcon: ({ color }) => (
-          <Text style={{ color, fontSize: 20 }}>👥</Text>
-        ),
-      }}
-    />
-  </Tab.Navigator>
 );
 
 const AppNavigator = () => {
@@ -152,11 +167,11 @@ const AppNavigator = () => {
   const [isSplashVisible, setIsSplashVisible] = useState(true);
 
   useEffect(() => {
-    // If splash screen should auto-hide (e.g., after auth loading)
+    // Auto-hide splash after auth loading
     if (!authLoading && isSplashVisible) {
       const timer = setTimeout(() => {
         setIsSplashVisible(false);
-      }, 1000); // Give a small buffer after auth loads
+      }, 1500); // Slightly longer to ensure smooth transition
       
       return () => clearTimeout(timer);
     }
@@ -175,9 +190,11 @@ const AppNavigator = () => {
   }
 
   return (
+    <SafeAreaProvider>
     <NavigationContainer>
-      {isAuthenticated ? <MainTabs /> : <AuthStack />}
+        {isAuthenticated ? <MainStack /> : <AuthStack />}
     </NavigationContainer>
+    </SafeAreaProvider>
   );
 };
 

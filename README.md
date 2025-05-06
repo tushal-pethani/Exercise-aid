@@ -1,89 +1,120 @@
-# PhysioConnect App
+# EXERCISE AID Mobile App
 
-A React Native application for physiotherapists and patients to connect, monitor, and track physical therapy exercises using motion sensors on ESP32 devices.
+A React Native application that connects to ESP32 Bluetooth devices for motion tracking, angle measurements, and exercise assistance.
+
+## Overview
+
+Exercise Aid is a mobile application designed to help clients perform exercises correctly by monitoring their movements via ESP32 Bluetooth sensors. The app supports both client and physiotherapist roles, enabling personalized exercise prescription and monitoring.
 
 ## Features
 
-- **User Authentication** - Register and login as either a patient or physiotherapist
-- **Connection Management** - Send, accept, or decline connection requests between patients and therapists
-- **Exercise Monitoring** - Real-time tracking of exercises using ESP32 Bluetooth sensors
-- **Angle Measurement** - Visual display of joint angles during exercises
-- **Calibration** - Reset angle measurements to zero for accurate readings
-- **Exercise History** - Track and review past exercise sessions
-- **Role-Based System** - Different features and views for patients vs physiotherapists
+### Authentication
+- Email/password-based login and registration
+- Role selection (client or physiotherapist)
+- User profile management
 
-## Tech Stack
+### Client Features
+- **Home Screen**: Navigation to custom tasks or assigned exercises
+- **Custom Exercise Task**:
+  - Select body part (Shoulder, Arm, Leg, Back)
+  - Choose specific exercises for the selected body part
+  - Configure sets, reps, target angle, and rest time
+- **Assigned Exercises**:
+  - View exercises assigned by connected physiotherapists
+  - Filter by status (all, pending, completed)
+  - Track progress and completion status
+- **Bluetooth Device Connection**:
+  - Connect to ESP32 device for real-time motion tracking
+  - Calibrate and monitor exercise angles
+- **Exercise Feedback**:
+  - Real-time angle and velocity measurements
+  - Warnings for deviations (>10° from target angle)
+  - Warnings for excessive velocity (>30°/s)
+  - Performance summary after completion
 
-- React Native
-- MongoDB
-- Express.js
-- Node.js
-- Bluetooth Low Energy (BLE)
+### Physiotherapist Features
+- **Dashboard**: Overview of connected clients and activity
+- **Client Management**: View and manage client list
+- **Exercise Creation**: Create custom exercises for clients
+
+### Common Features
+- **Connections**: Manage connections between clients and physiotherapists
+- **Profile**: View and edit personal information
+- **Settings**: Configure app preferences
+- **3D Visualization**: Visualize movement in real-time (when connected to device)
+
+## Technical Architecture
+
+### Frontend
+- React Native for cross-platform mobile development
+- React Navigation for app navigation (drawer, stack, and tab navigation)
+- BLE-PLX for Bluetooth Low Energy connectivity
+- Context API for state management
+
+### Backend
+- Node.js server with Express
+- MongoDB database for user and exercise data storage
+- JWT-based authentication
+
+### Data Models
+- **User**: Stores user information, including role (client/physio)
+- **Exercise**: Defines exercise configurations and relationships
+- **ExerciseSession**: Records exercise performance and metrics
+- **Connection**: Manages client-physiotherapist relationships
 
 ## Getting Started
 
 ### Prerequisites
-
-- Node.js 18+
-- MongoDB
-- Xcode (for iOS development)
-- Android Studio (for Android development)
+- Node.js (v14+)
+- React Native development environment
+- ESP32 device with motion sensors (for full functionality)
 
 ### Installation
 
-1. Clone the repository
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/Esp32BluetoothApp.git
+   cd Esp32BluetoothApp
+   ```
+
 2. Install dependencies:
-```
-cd Esp32BluetoothApp
-npm install
-```
+   ```
+   npm install
+   ```
 
-3. Create a `.env` file in the root directory with:
-```
-MONGODB_URI=mongodb://localhost:27017/physiotherapy
-JWT_SECRET=your_jwt_secret_key_here
-API_URL=http://localhost:5000/api
-```
+3. For iOS, install pods:
+   ```
+   cd ios && pod install && cd ..
+   ```
 
-4. Start the MongoDB server
-5. Start the backend server:
-```
-npm run server
-```
+4. Add required image assets in the `assets/images` directory:
+   - background.jpg
+   - exercise_banner.jpg
+   - physio_banner.jpg
+   - lateral_raise.jpg
+   - bicep_curl.jpg
+   - squat.jpg
 
-6. Run the app on iOS or Android:
+### Running the App
+
+#### iOS
 ```
 npm run ios
-# or
+```
+
+#### Android
+```
 npm run android
 ```
 
-## ESP32 Sensor Setup
+## Future Enhancements
 
-The app works with ESP32 devices running firmware that sends accelerometer and gyroscope data over Bluetooth Low Energy (BLE). The sensor data should be formatted as follows:
-
-- Service UUID: `6e400001-b5a3-f393-e0a9-e50e24dcca9e`
-- Characteristic UUID: `6e400003-b5a3-f393-e0a9-e50e24dcca9e`
-
-## Usage
-
-1. Register as either a patient or physiotherapist
-2. Log in to the app
-3. If you're a physiotherapist, find patients using the "Find Connections" feature
-4. Send connection requests to patients
-5. Once connected, access the exercise monitoring features
-6. Connect to an ESP32 device to begin tracking exercises
-7. Use the calibration button to reset angle measurements when needed
-8. Track progress and monitor exercise form in real-time
-
-## Color Scheme
-
-The app uses the following color scheme:
-- Primary: `#C4DB93`
-- Secondary: `#32AD5E`
-- Background: `#EFEDE2`
-- Text: `#000000`
+- Chat functionality between clients and physiotherapists
+- Video guides for exercises
+- Analytics dashboard for progress tracking
+- Integration with health apps
+- Cloud synchronization for offline use
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the LICENSE file for details.

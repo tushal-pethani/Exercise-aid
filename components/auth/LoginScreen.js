@@ -9,10 +9,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert
+  Alert,
+  ImageBackground,
+  Image
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { COLORS, SIZES } from '../../utils/theme';
+import { COLORS, SIZES, SHADOWS } from '../../utils/theme';
 
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
@@ -36,18 +38,27 @@ const LoginScreen = ({ navigation }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      <ImageBackground 
+        source={require('../../assets/images/background.jpg')} 
+        style={styles.backgroundImage}
+        resizeMode="cover"
+    >
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.logoContainer}>
-          <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>P</Text>
+            <View style={styles.logoCircle}>
+              <Text style={styles.logoText}>E</Text>
           </View>
-          <Text style={styles.title}>PhysioConnect</Text>
+            <Text style={styles.title}>EXERCISE AID</Text>
+            <Text style={styles.subtitle}>Connect. Track. Improve.</Text>
         </View>
 
         <View style={styles.formContainer}>
+            <Text style={styles.formTitle}>Sign In</Text>
+            
+            <View style={styles.inputContainer}>
           <Text style={styles.label}>Username</Text>
           <TextInput
             style={styles.input}
@@ -55,8 +66,11 @@ const LoginScreen = ({ navigation }) => {
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
+                placeholderTextColor={COLORS.textSecondary}
           />
+            </View>
 
+            <View style={styles.inputContainer}>
           <Text style={styles.label}>Password</Text>
           <TextInput
             style={styles.input}
@@ -64,7 +78,9 @@ const LoginScreen = ({ navigation }) => {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+                placeholderTextColor={COLORS.textSecondary}
           />
+            </View>
 
           <TouchableOpacity
             style={styles.button}
@@ -74,7 +90,7 @@ const LoginScreen = ({ navigation }) => {
             {loading ? (
               <ActivityIndicator color={COLORS.white} />
             ) : (
-              <Text style={styles.buttonText}>Login</Text>
+                <Text style={styles.buttonText}>LOGIN</Text>
             )}
           </TouchableOpacity>
 
@@ -86,6 +102,7 @@ const LoginScreen = ({ navigation }) => {
           </View>
         </View>
       </ScrollView>
+      </ImageBackground>
     </KeyboardAvoidingView>
   );
 };
@@ -93,7 +110,11 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
   },
   scrollContainer: {
     flexGrow: 1,
@@ -104,7 +125,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SIZES.padding * 2,
   },
-  logoPlaceholder: {
+  logoCircle: {
     width: 120,
     height: 120,
     borderRadius: 60,
@@ -114,6 +135,7 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.padding,
     borderWidth: 5,
     borderColor: COLORS.secondary,
+    ...SHADOWS.medium,
   },
   logoText: {
     fontSize: 60,
@@ -123,38 +145,58 @@ const styles = StyleSheet.create({
   title: {
     fontSize: SIZES.xxLarge,
     fontWeight: 'bold',
-    color: COLORS.secondary,
-    marginBottom: SIZES.padding,
+    color: COLORS.white,
+    marginBottom: SIZES.paddingSmall,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
+  },
+  subtitle: {
+    fontSize: SIZES.medium,
+    color: COLORS.white,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
   formContainer: {
     backgroundColor: COLORS.white,
-    borderRadius: SIZES.radius,
+    borderRadius: SIZES.radiusLarge,
     padding: SIZES.padding * 2,
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    ...SHADOWS.large,
+  },
+  formTitle: {
+    fontSize: SIZES.xLarge,
+    fontWeight: 'bold',
+    color: COLORS.secondary,
+    marginBottom: SIZES.padding * 1.5,
+    textAlign: 'center',
+  },
+  inputContainer: {
+    marginBottom: SIZES.padding,
   },
   label: {
     fontSize: SIZES.medium,
     marginBottom: 8,
     color: COLORS.text,
+    fontWeight: '500',
   },
   input: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: SIZES.radius / 2,
+    backgroundColor: COLORS.background,
+    borderRadius: SIZES.radius,
     paddingHorizontal: SIZES.padding,
     paddingVertical: 12,
-    marginBottom: SIZES.padding,
     fontSize: SIZES.medium,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   button: {
     backgroundColor: COLORS.secondary,
     borderRadius: SIZES.radius,
-    paddingVertical: 14,
+    paddingVertical: 16,
     alignItems: 'center',
     marginTop: SIZES.padding,
+    ...SHADOWS.small,
   },
   buttonText: {
     color: COLORS.white,

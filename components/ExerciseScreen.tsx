@@ -15,33 +15,70 @@ import base64 from 'base-64';
 import parseSensorData from '../utils/parseSensorData';
 import ExerciseAngleGauge from './ExerciseAngleGauge';
 import ExerciseMomentumGauge from './ExerciseMomentumGauge';
-import { COLORS } from '../utils/theme';
+import { COLORS, SIZES } from '../utils/theme';
+import { useBluetooth } from '../context/BluetoothContext';
+import RestTimerModal from './RestTimerModal';
+import ExerciseCompletionModal from './ExerciseCompletionModal';
+import { saveExercise } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
+import axios from 'axios';
+
+interface ExerciseConfigType {
+  bodyPart: string;
+  exercise: string;
+  sets: number;
+  reps: number;
+  targetAngle: number;
+  restTime: number;
+  assignmentId?: string;
+}
 
 interface ExerciseScreenProps {
-  route: { params: { device: Device } };
+  route: { 
+    params: { 
+      device?: Device;
+      exerciseConfig?: ExerciseConfigType;
+    } 
+  };
   navigation: any;
 }
 
 const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const CHARACTERISTIC_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 
-// Exercise configuration
-const TARGET_ANGLE = 100; // Degrees
-const MOMENTUM_THRESHOLD = 70; // Arbitrary units for momentum
-const REP_THRESHOLD = 80; // Angle needed to count as a rep
-const REST_THRESHOLD = 30; // Angle below which the arm is considered at rest
-const REP_ZERO_THRESHOLD = 15; // Angle below which arm is considered at 0
-const REP_COUNT_THRESHOLD = 85; // Angle threshold to count as crossing 90 degrees
-
 interface SensorData {
   acc?: { x: number; y: number; z: number };
   gyro?: { x: number; y: number; z: number };
 }
 
+// Define rep performance types for tracking
+type RepQuality = 'perfect' | 'good' | 'bad';
+
 const { width } = Dimensions.get('window');
 
 const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) => {
-  const { device } = route.params;
+  const { connectedDevice, deviceInfo } = useBluetooth();
+  const { user, token } = useAuth();
+  const device = connectedDevice || route.params?.device;
+  
+  // Get exercise config from params or use defaults
+  const exerciseConfig = route.params?.exerciseConfig || {
+    bodyPart: 'shoulder',
+    exercise: 'lateral_raise',
+    sets: 3,
+    reps: 10,
+    targetAngle: 90,
+    restTime: 60
+  };
+  
+  // Exercise parameters based on config
+  const TARGET_ANGLE = exerciseConfig.targetAngle;
+  const MOMENTUM_THRESHOLD = 70; // Arbitrary units for momentum  
+  const ANGLE_DEVIATION_THRESHOLD = 10; // Max degrees of deviation from target
+  const REP_THRESHOLD = Math.floor(TARGET_ANGLE * 0.8); // 80% of target angle needed to count as a rep
+  const REST_THRESHOLD = 30; // Angle below which the arm is considered at rest
+  const REP_ZERO_THRESHOLD = 15; // Angle below which arm is considered at 0
+  const REP_COUNT_THRESHOLD = Math.floor(TARGET_ANGLE * 0.85); // 85% of target angle to count as crossing threshold
   
   // Sensor data states
   const [latestAcc, setLatestAcc] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -50,9 +87,12 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
   // Exercise tracking states
   const [currentAngle, setCurrentAngle] = useState(0);
   const [currentMomentum, setCurrentMomentum] = useState(0);
-  const [repCount, setRepCount] = useState(0);
+  const [repCount, setRepCount] = useState(0); // Total reps in current set (initialized after calibration)
+  const [completedReps, setCompletedReps] = useState(0); // Completed reps in current set
+  const [setCount, setSetCount] = useState(0); // Total sets (initialized after calibration)
+  const [completedSets, setCompletedSets] = useState(0); // Completed sets
   const [exerciseState, setExerciseState] = useState<'rest' | 'raising' | 'lowering'>('rest');
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState('Please calibrate to begin');
   
   // Track if we're connected
   const [isConnected, setIsConnected] = useState(true);
@@ -60,6 +100,26 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
   // Calibration offset for angle
   const [calibrationOffset, setCalibrationOffset] = useState(0);
   const [isCalibrating, setIsCalibrating] = useState(false);
+  const [hasCalibrated, setHasCalibrated] = useState(false);
+  
+  // Rep quality tracking
+  const [perfectReps, setPerfectReps] = useState(0);
+  const [goodReps, setGoodReps] = useState(0);
+  const [badReps, setBadReps] = useState(0);
+  const currentRepQualityRef = useRef<RepQuality>('perfect');
+  const totalRepsCompletedRef = useRef(0);
+  
+  // Modal states
+  const [showRestModal, setShowRestModal] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  
+  // Timer states
+  const [exerciseTime, setExerciseTime] = useState(0);
+  const exerciseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Warning states
+  const [showAngleWarning, setShowAngleWarning] = useState(false);
+  const [showVelocityWarning, setShowVelocityWarning] = useState(false);
   
   // Add rep flash indicator state
   const [showRepFlash, setShowRepFlash] = useState(false);
@@ -77,13 +137,36 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
 
   // Add state for tracking angular momentum/velocity
   const [angularVelocity, setAngularVelocity] = useState(0);
-  const [angularVelocityThreshold] = useState(35); // degrees per second
+  const [angularVelocityThreshold] = useState(120); // Increased threshold to 70 degrees per second
   const [isExceedingVelocity, setIsExceedingVelocity] = useState(false);
   const previousAngleRef = useRef(0);
   const lastUpdateTimeRef = useRef(Date.now());
+  
+  // Start the exercise timer
+  useEffect(() => {
+    // Don't start timer immediately, wait for calibration
+    if (hasCalibrated) {
+      console.log('Starting exercise timer after calibration');
+      exerciseTimerRef.current = setInterval(() => {
+        setExerciseTime(prev => prev + 1);
+      }, 1000);
+      
+      return () => {
+        if (exerciseTimerRef.current) {
+          clearInterval(exerciseTimerRef.current);
+        }
+      };
+    }
+  }, [hasCalibrated]);
 
   // Connection and data handling
   useEffect(() => {
+    if (!device) {
+      Alert.alert('Error', 'No device connected. Please connect a device first.');
+      navigation.goBack();
+      return;
+    }
+    
     let unmounted = false;
     
     const connectAndListen = async () => {
@@ -119,7 +202,7 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
               if (char.uuid.toLowerCase().includes(CHARACTERISTIC_UUID)) {
                 console.log(`Found matching characteristic: ${char.uuid}`);
                 // Listen for notifications
-                char.monitor((error, characteristic) => {
+                char.monitor((error: any, characteristic: any) => {
                   if (error) {
                     console.warn('Notification error:', error);
                     if (!unmounted) {
@@ -135,7 +218,6 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
                     
                     if (parsed && parsed.acc) {
                       setLatestAcc(parsed.acc);
-                      console.log('Received acc data:', parsed.acc);
                     }
                     if (parsed && parsed.gyro) {
                       setLatestGyro(parsed.gyro);
@@ -159,12 +241,34 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
     // Clean up on unmount
     return () => {
       unmounted = true;
-      device.cancelConnection().catch(error => {
+      device.cancelConnection().catch((error: any) => {
         console.warn('Disconnect error:', error);
       });
       manager.destroy();
     };
   }, [device]);
+  
+  // Remove excessive debug logging
+  useEffect(() => {
+    if (showRestModal) {
+      // Leave important logs
+      console.log('Rest modal activated');
+    }
+  }, [showRestModal, exerciseConfig.restTime]);
+
+  // Handle next set after rest period
+  const handleRestComplete = () => {
+    // Keep essential log
+    console.log('Rest completed');
+    setShowRestModal(false);
+    setCompletedReps(0); // Reset completed reps for next set
+    
+    // Set number display is 1-based (set 1, set 2, etc.)
+    const currentSetNumber = completedSets + 1;
+    
+    // Give feedback for new set
+    setFeedback(`Starting Set ${currentSetNumber} of ${exerciseConfig.sets}`);
+  };
   
   // Handle calibration
   const calibrateAngle = () => {
@@ -189,17 +293,113 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
     // Reset exercise tracking
     repInProgressRef.current = false;
     maxAngleReachedRef.current = 0;
-    setRepCount(0);
-    setExerciseState('rest');
-    setFeedback('Calibrated! Start your exercise.');
+    
+    // Initialize counters after calibration
+    setRepCount(exerciseConfig.reps);
+    setCompletedReps(0);
+    setSetCount(exerciseConfig.sets);
+    setCompletedSets(0);
+    
+    setFeedback(`Ready to start! Complete ${exerciseConfig.reps} reps for set 1 of ${exerciseConfig.sets}`);
     
     // Reset zero-to-90 tracking
     setHasReachedZero(true);
     setHasReached90(false);
     
+    // Reset rep quality tracking
+    setPerfectReps(0);
+    setGoodReps(0);
+    setBadReps(0);
+    totalRepsCompletedRef.current = 0;
+    currentRepQualityRef.current = 'perfect';
+    
+    // Reset exercise time
+    setExerciseTime(0);
+    
+    // Mark as calibrated
+    setHasCalibrated(true);
+    
     setTimeout(() => {
       setIsCalibrating(false);
     }, 1000);
+  };
+  
+  // Handle exercise completion
+  const handleExerciseComplete = () => {
+    // Stop the timer
+    if (exerciseTimerRef.current) {
+      clearInterval(exerciseTimerRef.current);
+    }
+    
+    // Calculate accuracy
+    const totalReps = totalRepsCompletedRef.current;
+    const accuracy = totalReps > 0 ? (perfectReps / totalReps) * 100 : 0;
+    
+    // Show completion modal
+    setShowCompletionModal(true);
+  };
+  
+  // Handle closing the completion modal and returning to home
+  const handleCompletionClose = async () => {
+    setShowCompletionModal(false);
+    
+    // Save exercise to database
+    const exerciseData = {
+      exerciseType: exerciseConfig.exercise,
+      bodyPart: exerciseConfig.bodyPart,
+      sets: exerciseConfig.sets,
+      reps: exerciseConfig.reps,
+      totalReps: exerciseConfig.sets * exerciseConfig.reps,
+      perfectReps: perfectReps,
+      goodReps: goodReps,
+      badReps: badReps,
+      timeTaken: exerciseTime,
+      accuracy: (perfectReps / (perfectReps + goodReps + badReps)) * 100 || 0,
+      targetAngle: exerciseConfig.targetAngle
+    };
+
+    try {
+      // Save to database through API
+      await saveExercise(exerciseData);
+      console.log('Exercise saved to database');
+      
+      // If this is an assigned exercise, mark it as completed
+      const assignmentId = route.params?.exerciseConfig?.assignmentId;
+      
+      if (assignmentId) {
+        console.log('Marking assignment as completed:', assignmentId);
+        try {
+          const API_URL = process.env.API_URL || 'http://172.20.10.5:3000/api';
+          await axios.patch(
+            `${API_URL}/assignments/${assignmentId}`,
+            { status: 'completed' },
+            { headers: { 'x-auth-token': token } }
+          );
+          console.log('Assignment marked as completed');
+        } catch (error) {
+          console.error('Error marking assignment as completed:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving exercise to database:', error);
+      Alert.alert(
+        'Save Error',
+        'Failed to save exercise data to the server. Your progress will not be recorded.'
+      );
+    }
+    
+    // Navigate back to drawer navigator
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'DrawerNavigator' }],
+    });
+  };
+  
+  // Format time in MM:SS
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
   
   // Process sensor data to calculate angle and momentum
@@ -210,18 +410,10 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
       const y = latestAcc.y;
       const z = latestAcc.z;
       
-      // CORRECTED LATERAL RAISE CALCULATION
-      // For lateral raises, orient based on device placement:
-      // Assuming device is on upper arm with screen facing outward:
-      
-      // Calculate true angle between arm and vertical (not using absolute values)
-      // This preserves the sign and gives a more accurate representation
+      // Calculate true angle between arm and vertical
       const rawAngle = Math.atan2(x, z) * (180 / Math.PI);
       
-      // No need to adjust the range - keep full -180 to +180 degrees
-      // This preserves directionality and gives a more complete picture
-      
-      // Apply calibration - will zero the angle at starting position
+      // Apply calibration
       const calibratedAngle = rawAngle - calibrationOffset;
       
       // Calculate angular velocity (degrees per second)
@@ -237,83 +429,159 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
       // Set angular velocity state
       setAngularVelocity(velocity);
       
-      // Check if exceeding threshold
-      const isExceeding = velocity > angularVelocityThreshold;
-      if (isExceeding !== isExceedingVelocity) {
-        setIsExceedingVelocity(isExceeding);
-        if (isExceeding) {
-          // Play alert sound when crossing the threshold
-          Vibration.vibrate(100);
-          console.log(`Angular velocity threshold exceeded: ${velocity.toFixed(1)}°/s`);
-        }
-      }
-      
-      // Debug logging
-      console.log(`Raw sensor: x=${x.toFixed(2)}, y=${y.toFixed(2)}, z=${z.toFixed(2)}`);
-      console.log(`Raw angle: ${rawAngle.toFixed(1)}°, Calibrated: ${calibratedAngle.toFixed(1)}°`);
-      console.log(`Angular velocity: ${velocity.toFixed(1)}°/s`);
-      
-      setCurrentAngle(calibratedAngle);
-      
-      // Modify rep counting to work with new angle calculation
-      // Need to handle positive and negative angles
-      const absAngle = Math.abs(calibratedAngle);
-      
-      if (absAngle <= REP_ZERO_THRESHOLD && !hasReachedZero) {
-        setHasReachedZero(true);
-        setHasReached90(false);
-      } else if (absAngle >= REP_COUNT_THRESHOLD && hasReachedZero && !hasReached90) {
-        setHasReached90(true);
-        // Increment rep count when crossing from 0 to 90
-        setRepCount(prev => prev + 1);
-        setFeedback('Rep counted!');
-        Vibration.vibrate(200);
-        
-        // Show the rep flash visual feedback
-        setShowRepFlash(true);
-        setTimeout(() => setShowRepFlash(false), 500);
-      } else if (absAngle > REP_ZERO_THRESHOLD && absAngle < REP_COUNT_THRESHOLD) {
-        // In the middle zone - reset hasReached90 when lowering
-        if (absAngle < 45 && hasReached90) {
-          setHasReached90(false);
-        }
-      }
-      
-      // Modify original exercise tracking logic to work with the new angle calculation
-      if (absAngle > REP_THRESHOLD && !repInProgressRef.current) {
-        // Started a new rep
-        repInProgressRef.current = true;
-        setExerciseState('raising');
-        maxAngleReachedRef.current = absAngle;
-      } else if (absAngle > maxAngleReachedRef.current && repInProgressRef.current) {
-        // Continuing to raise
-        maxAngleReachedRef.current = absAngle;
-        setExerciseState('raising');
-      } else if (absAngle < maxAngleReachedRef.current - 15 && repInProgressRef.current) {
-        // Started lowering
-        setExerciseState('lowering');
-      } else if (absAngle < REST_THRESHOLD && repInProgressRef.current) {
-        // Completed a rep
-        repInProgressRef.current = false;
-        setExerciseState('rest');
-        
-        // Give feedback based on max angle reached
-        if (maxAngleReachedRef.current >= TARGET_ANGLE - 5) {
-          setFeedback('Great rep!');
-          Vibration.vibrate(200);
-        } else if (maxAngleReachedRef.current >= TARGET_ANGLE - 15) {
-          setFeedback('Good, but try to raise higher');
-          Vibration.vibrate([100, 50, 100]);
+      // Only process rep counting and warnings if calibration has been done
+      if (hasCalibrated) {
+        // Check for angle deviation warning
+        const absAngle = Math.abs(calibratedAngle);
+        if (absAngle > TARGET_ANGLE + ANGLE_DEVIATION_THRESHOLD) {
+          if (!showAngleWarning) {
+            setShowAngleWarning(true);
+            setFeedback('Warning: Angle too high!');
+            Vibration.vibrate(200);
+            
+            // Downgrade rep quality
+            if (currentRepQualityRef.current === 'perfect') {
+              currentRepQualityRef.current = 'good';
+            } else if (currentRepQualityRef.current === 'good') {
+              currentRepQualityRef.current = 'bad';
+            }
+          }
+        } else if (absAngle < TARGET_ANGLE - ANGLE_DEVIATION_THRESHOLD && absAngle > REP_THRESHOLD) {
+          if (!showAngleWarning) {
+            setShowAngleWarning(true);
+            setFeedback('Warning: Angle too low!');
+            Vibration.vibrate(200);
+            
+            // Downgrade rep quality
+            if (currentRepQualityRef.current === 'perfect') {
+              currentRepQualityRef.current = 'good';
+            } else if (currentRepQualityRef.current === 'good') {
+              currentRepQualityRef.current = 'bad';
+            }
+          }
         } else {
-          setFeedback('Raise your arm higher next time');
-          Vibration.vibrate([50, 30, 50, 30, 50]);
+          setShowAngleWarning(false);
         }
         
-        // Track that we've reached 0 (resting position) again
-        setHasReachedZero(true);
+        // Check if exceeding velocity threshold
+        const isExceeding = velocity > angularVelocityThreshold;
+        if (isExceeding !== isExceedingVelocity) {
+          setIsExceedingVelocity(isExceeding);
+          if (isExceeding) {
+            setShowVelocityWarning(true);
+            setFeedback('Warning: Moving too fast!');
+            Vibration.vibrate(200);
+            
+            // Downgrade rep quality
+            if (currentRepQualityRef.current === 'perfect') {
+              currentRepQualityRef.current = 'good';
+            } else if (currentRepQualityRef.current === 'good') {
+              currentRepQualityRef.current = 'bad';
+            }
+          } else {
+            setShowVelocityWarning(false);
+          }
+        }
         
-        // Reset max angle
-        maxAngleReachedRef.current = 0;
+        // Update current angle display
+        setCurrentAngle(calibratedAngle);
+        
+        // Modify rep counting to work with new angle calculation
+        const absAngleValue = Math.abs(calibratedAngle);
+        
+        if (absAngleValue <= REP_ZERO_THRESHOLD && !hasReachedZero) {
+          setHasReachedZero(true);
+          setHasReached90(false);
+          
+          // Reset quality for next rep
+          currentRepQualityRef.current = 'perfect'; 
+        } else if (absAngleValue >= REP_COUNT_THRESHOLD && hasReachedZero && !hasReached90) {
+          setHasReached90(true);
+          
+          // Increment completed reps counter
+          setCompletedReps(prev => {
+            const newCompletedReps = prev + 1;
+            // Keep only essential log
+            console.log(`Rep ${newCompletedReps}/${repCount} completed`);
+            
+            // Track rep quality
+            if (currentRepQualityRef.current === 'perfect') {
+              setPerfectReps(p => p + 1);
+            } else if (currentRepQualityRef.current === 'good') {
+              setGoodReps(g => g + 1);
+            } else {
+              setBadReps(b => b + 1);
+            }
+            
+            // Increment total completed reps
+            totalRepsCompletedRef.current += 1;
+            
+            // Check if set is complete
+            if (newCompletedReps === repCount) {
+              console.log(`Set ${completedSets + 1}/${setCount} completed`);
+              
+              // Increment completed sets
+              setCompletedSets(prevSets => {
+                const newCompletedSets = prevSets + 1;
+                
+                // Check if all sets are completed
+                if (newCompletedSets === setCount) {
+                  console.log('All sets completed');
+                  handleExerciseComplete();
+                } else {
+                  // Start rest timer between sets - remove excessive logging
+                  setTimeout(() => {
+                    setShowRestModal(true);
+                  }, 300);
+                }
+                
+                return newCompletedSets;
+              });
+            }
+            
+            return newCompletedReps;
+          });
+          
+          // Only show feedback if we're still in the exercise
+          if (completedReps < repCount - 1 || completedSets < setCount - 1) {
+            setFeedback('Rep counted!');
+            // No vibration for successful rep as requested
+            
+            // Show the rep flash visual feedback
+            setShowRepFlash(true);
+            setTimeout(() => setShowRepFlash(false), 500);
+          }
+        } else if (absAngleValue > REP_ZERO_THRESHOLD && absAngleValue < REP_COUNT_THRESHOLD) {
+          // In the middle zone - reset hasReached90 when lowering
+          if (absAngleValue < 45 && hasReached90) {
+            setHasReached90(false);
+          }
+        }
+        
+        // Modify original exercise tracking logic to work with the new angle calculation
+        if (absAngleValue > REP_THRESHOLD && !repInProgressRef.current) {
+          // Started a new rep
+          repInProgressRef.current = true;
+          setExerciseState('raising');
+          maxAngleReachedRef.current = absAngleValue;
+        } else if (absAngleValue > maxAngleReachedRef.current && repInProgressRef.current) {
+          // Continuing to raise
+          maxAngleReachedRef.current = absAngleValue;
+          setExerciseState('raising');
+        } else if (absAngleValue < maxAngleReachedRef.current - 15 && repInProgressRef.current) {
+          // Started lowering
+          setExerciseState('lowering');
+        } else if (absAngleValue < REST_THRESHOLD && repInProgressRef.current) {
+          // Completed a rep
+          repInProgressRef.current = false;
+          setExerciseState('rest');
+          
+          // Reset max angle
+          maxAngleReachedRef.current = 0;
+        }
+      } else {
+        // Just update current angle display for visual feedback before calibration
+        setCurrentAngle(calibratedAngle);
       }
     }
     
@@ -336,25 +604,47 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
       const momentum = Math.min(100, (gyroMagnitude * 0.7 + accMagnitude * 0.3) * 10);
       setCurrentMomentum(momentum);
     }
-  }, [latestAcc, latestGyro, calibrationOffset]);
+  }, [latestAcc, latestGyro, calibrationOffset, hasCalibrated]);
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        <Text style={styles.headerText}>Exercise Session</Text>
+        <Text style={styles.headerText}>Exercise In Progress</Text>
         {!isConnected && <Text style={styles.connectionError}>Device Disconnected</Text>}
+      </View>
+      
+      {/* Timer and Set/Rep Display */}
+      <View style={styles.progressContainer}>
+        <View style={styles.timerContainer}>
+          <Text style={styles.timerLabel}>Time</Text>
+          <Text style={styles.timerValue}>{formatTime(exerciseTime)}</Text>
+        </View>
+        
+        <View style={styles.progressDetails}>
+          <View style={styles.setContainer}>
+            <Text style={styles.setLabel}>SET</Text>
+            <Text style={styles.setValue}>
+              {completedSets + 1}/{setCount}
+            </Text>
+          </View>
+          
+          <View style={styles.repContainer}>
+            <Text style={styles.repLabel}>REP</Text>
+            <Text style={styles.repValue}>
+              {completedReps}/{repCount}
+            </Text>
+          </View>
+        </View>
       </View>
       
       <View style={styles.gaugesContainer}>
         <ExerciseAngleGauge 
-          style={styles.gauge} 
           currentAngle={currentAngle} 
           thresholdAngle={TARGET_ANGLE} 
         />
         <ExerciseMomentumGauge 
-          style={styles.gauge} 
-          currentMomentum={currentMomentum} 
-          threshold={MOMENTUM_THRESHOLD} 
+          momentum={currentMomentum} 
+          maxMomentum={MOMENTUM_THRESHOLD} 
         />
       </View>
       
@@ -379,8 +669,20 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
         </Text>
       </View>
       
+      {/* Warnings */}
+      {(showAngleWarning || showVelocityWarning) && (
+        <View style={styles.warningContainer}>
+          <Text style={styles.warningText}>
+            {showAngleWarning 
+              ? `Keep angle within ${TARGET_ANGLE}° ± ${ANGLE_DEVIATION_THRESHOLD}°` 
+              : showVelocityWarning 
+                ? 'Slow down your movement' 
+                : ''}
+          </Text>
+        </View>
+      )}
+      
       <View style={styles.feedbackContainer}>
-        <Text style={styles.repCountText}>Repetitions: {repCount}</Text>
         <Text style={styles.feedbackText}>{feedback}</Text>
         
         {/* Visual rep count flash indicator */}
@@ -402,10 +704,51 @@ const ExerciseScreen: React.FC<ExerciseScreenProps> = ({ route, navigation }) =>
           </Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-          <Text style={styles.buttonText}>Finish Exercise</Text>
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={() => {
+            Alert.alert(
+              'End Exercise',
+              'Are you sure you want to end this exercise session?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'End', 
+                  style: 'destructive',
+                  onPress: () => navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'DrawerNavigator' }],
+                  })
+                }
+              ]
+            );
+          }}
+        >
+          <Text style={styles.buttonText}>End Exercise</Text>
         </TouchableOpacity>
       </View>
+      
+      {/* Rest Timer Modal */}
+      <RestTimerModal 
+        visible={showRestModal} 
+        duration={exerciseConfig.restTime}
+        onComplete={handleRestComplete}
+      />
+      
+      {/* Exercise Completion Modal */}
+      <ExerciseCompletionModal
+        visible={showCompletionModal}
+        onClose={handleCompletionClose}
+        statistics={{
+          totalSets: exerciseConfig.sets,
+          totalReps: exerciseConfig.sets * exerciseConfig.reps,
+          perfectReps: perfectReps,
+          goodReps: goodReps,
+          badReps: badReps,
+          timeTaken: exerciseTime,
+          accuracy: (perfectReps / (perfectReps + goodReps + badReps)) * 100 || 0
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -431,29 +774,91 @@ const styles = StyleSheet.create({
     color: 'red',
     marginTop: 4,
   },
+  progressContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    marginTop: 10,
+    marginHorizontal: 10,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  timerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  timerValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  progressDetails: {
+    flexDirection: 'row',
+  },
+  setContainer: {
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  setLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  setValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  repContainer: {
+    alignItems: 'center',
+  },
+  repLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  repValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.secondary,
+  },
   gaugesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginVertical: 20,
   },
-  gauge: {
-    width: width / 2 - 30,
-    height: width / 2 - 30,
-  },
   feedbackContainer: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 10,
     paddingHorizontal: 20,
-  },
-  repCountText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 12,
+    height: 60, // Fixed height to prevent layout shifts
   },
   feedbackText: {
     fontSize: 18,
     textAlign: 'center',
     color: '#333',
+  },
+  warningContainer: {
+    backgroundColor: 'rgba(255, 82, 82, 0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF5252',
+  },
+  warningText: {
+    color: '#D32F2F',
+    fontSize: 14,
+    fontWeight: '500',
   },
   buttonsContainer: {
     flexDirection: 'row',

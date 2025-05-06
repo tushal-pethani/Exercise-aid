@@ -8,22 +8,32 @@ import {
   ActivityIndicator,
   PermissionsAndroid,
   Platform,
-  Image,
   Animated,
   Easing,
+  StatusBar,
 } from 'react-native';
-import { BleManager, Device } from 'react-native-ble-plx';
-import { SafeAreaView } from 'react-native';
+import { Device } from 'react-native-ble-plx';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { COLORS, SIZES, SHADOWS } from '../utils/theme';
+import { useBluetooth } from '../context/BluetoothContext';
 
 interface DeviceScanScreenProps {
-  onDeviceConnect: (device: Device) => void;
+  onDeviceConnect?: (device: Device) => void;
 }
 
 const DeviceScanScreen: React.FC<DeviceScanScreenProps> = ({ onDeviceConnect }) => {
-  const [isScanning, setIsScanning] = useState(false);
+  const navigation = useNavigation();
+  const route = useRoute();
+  const { 
+    isScanning, 
+    scanForDevices, 
+    stopScan, 
+    connectToDevice,
+    error 
+  } = useBluetooth();
+  
   const [devices, setDevices] = useState<Device[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [manager] = useState(() => new BleManager());
   
   // Create animated value for pulsating effect
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -31,10 +41,24 @@ const DeviceScanScreen: React.FC<DeviceScanScreenProps> = ({ onDeviceConnect }) 
   const deviceIdsRef = useRef<Set<string>>(new Set());
   
   useEffect(() => {
-    requestPermissions();
+    const startScanning = async () => {
+      // Clear the device IDs set when starting a new scan
+      deviceIdsRef.current.clear();
+      setDevices([]);
+      
+      // Start scanning and collect devices
+      await scanForDevices((device) => {
+        if (!deviceIdsRef.current.has(device.id)) {
+          deviceIdsRef.current.add(device.id);
+          setDevices(prevDevices => [...prevDevices, device]);
+        }
+      });
+    };
+    
+    startScanning();
 
     return () => {
-      manager.stopDeviceScan();
+      stopScan();
     };
   }, []);
   
@@ -62,71 +86,39 @@ const DeviceScanScreen: React.FC<DeviceScanScreenProps> = ({ onDeviceConnect }) 
     }
   }, [isScanning, pulseAnim]);
 
-  const requestPermissions = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Bluetooth Permission',
-            message: 'This app needs access to your location to scan for Bluetooth devices.',
-            buttonPositive: 'OK',
-          }
-        );
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          scanForDevices();
-        } else {
-          setError('Location permission denied');
-        }
-      } catch (err) {
-        setError('Error requesting permissions');
-        console.error(err);
-      }
-    } else {
-      // iOS doesn't need explicit permission for BLE scanning
-      scanForDevices();
-    }
-  };
-
-  const scanForDevices = () => {
-    setIsScanning(true);
-    setDevices([]);
-    setError(null);
-    
+  const handleScanForDevices = () => {
     // Clear the device IDs set when starting a new scan
     deviceIdsRef.current.clear();
-
-    // Set a timeout to stop scanning after 10 seconds
-    setTimeout(() => {
-      if (isScanning) {
-        manager.stopDeviceScan();
-        setIsScanning(false);
-      }
-    }, 10000);
-
-    manager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        setError('Scan error: ' + error.message);
-        setIsScanning(false);
-        return;
-      }
-
-      // Only add devices with a name and don't add duplicates using our ref
-      if (device?.name && !deviceIdsRef.current.has(device.id)) {
+    setDevices([]);
+    
+    // Start scanning and collect devices
+    scanForDevices((device) => {
+      if (!deviceIdsRef.current.has(device.id)) {
         deviceIdsRef.current.add(device.id);
         setDevices(prevDevices => [...prevDevices, device]);
       }
     });
   };
 
-  const connectToDevice = async (device: Device) => {
-    try {
-      setIsScanning(false);
-      manager.stopDeviceScan();
+  const handleConnectToDevice = async (device: Device) => {
+    const success = await connectToDevice(device);
+    
+    if (success) {
+      // Call the onDeviceConnect callback if it exists
+      if (onDeviceConnect) {
       onDeviceConnect(device);
-    } catch (error) {
-      setError('Connection error');
-      console.error(error);
+      }
+      
+      // Get exercise config if coming from custom task
+      const exerciseConfig = route.params?.exerciseConfig;
+      
+      if (exerciseConfig) {
+        // If we have exercise config, navigate to exercise start screen
+        navigation.navigate('ExerciseStart', { exerciseConfig });
+      } else {
+        // Otherwise just go back
+        navigation.goBack();
+      }
     }
   };
 
@@ -139,7 +131,7 @@ const DeviceScanScreen: React.FC<DeviceScanScreenProps> = ({ onDeviceConnect }) 
           styles.deviceItem,
           isMPU6050 && styles.highlightedDevice
         ]}
-        onPress={() => connectToDevice(item)}
+        onPress={() => handleConnectToDevice(item)}
       >
         <View style={styles.deviceIconContainer}>
           {isMPU6050 ? (
@@ -156,29 +148,48 @@ const DeviceScanScreen: React.FC<DeviceScanScreenProps> = ({ onDeviceConnect }) 
           <Text style={[styles.deviceName, isMPU6050 && styles.highlightedText]}>
             {item.name || 'Unknown Device'}
           </Text>
-          <Text style={styles.deviceId}>{item.id}</Text>
+          <Text style={styles.deviceId}>{item.id.substring(0, 17)}...</Text>
           {isMPU6050 && (
             <Text style={styles.compatibleText}>Compatible Device</Text>
           )}
         </View>
-        <View style={styles.connectButton}>
+        <View style={styles.connectButtonContainer}>
+          <TouchableOpacity 
+            style={styles.connectButton}
+            onPress={() => handleConnectToDevice(item)}
+          >
           <Text style={styles.connectButtonText}>Connect</Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar backgroundColor={COLORS.primary} barStyle="dark-content" />
+      
+      {/* Custom Header with Back Button */}
       <View style={styles.header}>
-        <Text style={styles.title}>ESP32 Motion Visualizer</Text>
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.headerIcon}>←</Text>
+        </TouchableOpacity>
+        
+        <Text style={styles.headerTitle}>Connect Device</Text>
+        
+        <View style={styles.headerRight}>
+          {/* Empty view for balance */}
+        </View>
       </View>
 
       <View style={styles.content}>
         <View style={styles.infoSection}>
           <View style={styles.iconContainer}>
             <View style={styles.iconCircle}>
-              <Text style={styles.iconText}>MPU</Text>
+              <Text style={styles.iconText}>📡</Text>
             </View>
           </View>
           <Text style={styles.instruction}>
@@ -189,38 +200,35 @@ const DeviceScanScreen: React.FC<DeviceScanScreenProps> = ({ onDeviceConnect }) 
         {isScanning ? (
           <View style={styles.scanningContainer}>
             <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <ActivityIndicator size="large" color="#4CAF50" />
+              <ActivityIndicator size="large" color={COLORS.secondary} />
             </Animated.View>
             <Text style={styles.scanningText}>Scanning for devices...</Text>
           </View>
         ) : (
-          <TouchableOpacity style={styles.scanButton} onPress={scanForDevices}>
+          <TouchableOpacity style={styles.scanButton} onPress={handleScanForDevices}>
             <Text style={styles.scanButtonText}>Scan for Devices</Text>
           </TouchableOpacity>
         )}
 
-        {error && <Text style={styles.errorText}>{error}</Text>}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
-        <View style={styles.listContainer}>
           <Text style={styles.sectionTitle}>
-            {devices.length > 0 ? 'Available Devices' : 'No devices found'}
+          {devices.length > 0 
+            ? `Available Devices (${devices.length})` 
+            : 'No devices found'}
           </Text>
+
           <FlatList
             data={devices}
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
-            ListEmptyComponent={
-              !isScanning && (
-                <View style={styles.emptyList}>
-                  <Text style={styles.emptyListText}>
-                    No Bluetooth devices found. Try scanning again.
-                  </Text>
-                </View>
-              )
-            }
+          contentContainerStyle={styles.listContent}
             style={styles.deviceList}
           />
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -229,174 +237,193 @@ const DeviceScanScreen: React.FC<DeviceScanScreenProps> = ({ onDeviceConnect }) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: COLORS.background,
   },
   header: {
-    padding: 16,
-    backgroundColor: '#1E1E1E',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.padding,
+    paddingTop: SIZES.paddingSmall,
+    paddingBottom: SIZES.paddingSmall,
+    backgroundColor: COLORS.primary,
   },
-  title: {
-    fontSize: 22,
+  headerButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  headerIcon: {
+    fontSize: SIZES.large,
+    color: COLORS.text,
+  },
+  headerTitle: {
+    fontSize: SIZES.large,
     fontWeight: 'bold',
-    color: '#4CAF50',
-    textAlign: 'center',
+    color: COLORS.text,
+  },
+  headerRight: {
+    width: 40,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: SIZES.padding,
   },
   infoSection: {
-    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1E1E',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+    marginBottom: SIZES.padding,
   },
   iconContainer: {
-    marginRight: 16,
+    marginBottom: SIZES.padding,
   },
   iconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#4CAF50',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    ...SHADOWS.medium,
   },
   iconText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 32,
   },
   instruction: {
-    color: 'white',
-    fontSize: 16,
-    flex: 1,
-  },
-  scanButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  scanButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: SIZES.medium,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SIZES.padding,
   },
   scanningContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    marginBottom: 20,
+    marginVertical: SIZES.padding,
   },
   scanningText: {
-    color: '#4CAF50',
-    fontSize: 16,
-    marginTop: 8,
+    marginTop: SIZES.paddingSmall,
+    fontSize: SIZES.medium,
+    color: COLORS.secondary,
+    fontWeight: '500',
+  },
+  scanButton: {
+    backgroundColor: COLORS.secondary,
+    paddingVertical: SIZES.padding,
+    borderRadius: SIZES.radius,
+    alignItems: 'center',
+    marginVertical: SIZES.padding,
+    ...SHADOWS.small,
+  },
+  scanButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: SIZES.medium,
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    padding: SIZES.padding,
+    borderRadius: SIZES.radius,
+    marginVertical: SIZES.padding,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.error,
   },
   errorText: {
-    color: '#ff6b6b',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  listContainer: {
-    flex: 1,
+    color: COLORS.error,
+    fontSize: SIZES.medium,
   },
   sectionTitle: {
-    color: '#9e9e9e',
-    fontSize: 16,
-    marginBottom: 8,
+    fontSize: SIZES.large,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginVertical: SIZES.padding,
   },
   deviceList: {
     flex: 1,
   },
+  listContent: {
+    paddingBottom: SIZES.padding,
+  },
   deviceItem: {
     flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    padding: SIZES.padding,
+    marginBottom: SIZES.paddingSmall,
     alignItems: 'center',
-    backgroundColor: '#1E1E1E',
-    marginBottom: 10,
-    borderRadius: 8,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#1E1E1E',
+    ...SHADOWS.small,
   },
   highlightedDevice: {
-    borderLeftColor: '#4CAF50',
-    backgroundColor: '#2E2E2E',
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.secondary,
   },
   deviceIconContainer: {
-    marginRight: 16,
+    marginRight: SIZES.padding,
   },
   sensorIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4CAF50',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(50, 173, 94, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.secondary,
   },
   sensorIconText: {
-    color: 'white',
+    fontSize: SIZES.small,
     fontWeight: 'bold',
-    fontSize: 12,
+    color: COLORS.secondary,
   },
   genericIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#757575',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(142, 142, 147, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.inactive,
   },
   genericIconText: {
-    color: 'white',
+    fontSize: SIZES.small,
     fontWeight: 'bold',
-    fontSize: 12,
+    color: COLORS.textSecondary,
   },
   deviceInfo: {
     flex: 1,
   },
   deviceName: {
-    color: 'white',
-    fontSize: 16,
+    fontSize: SIZES.medium,
+    fontWeight: 'bold',
+    color: COLORS.text,
     marginBottom: 4,
   },
-  deviceId: {
-    color: '#9e9e9e',
-    fontSize: 12,
-  },
   highlightedText: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
+    color: COLORS.secondary,
+  },
+  deviceId: {
+    fontSize: SIZES.small,
+    color: COLORS.textSecondary,
   },
   compatibleText: {
-    color: '#4CAF50',
-    fontSize: 12,
+    fontSize: SIZES.small,
+    color: COLORS.secondary,
     marginTop: 4,
+    fontWeight: '500',
+  },
+  connectButtonContainer: {
+    marginLeft: SIZES.paddingSmall,
   },
   connectButton: {
-    backgroundColor: '#2C2C2C',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
+    backgroundColor: COLORS.secondary,
+    paddingVertical: SIZES.paddingSmall,
+    paddingHorizontal: SIZES.padding,
+    borderRadius: SIZES.radiusSmall,
   },
   connectButtonText: {
-    color: '#4CAF50',
-    fontSize: 14,
+    color: COLORS.white,
     fontWeight: 'bold',
-  },
-  emptyList: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 30,
-  },
-  emptyListText: {
-    color: '#9e9e9e',
-    textAlign: 'center',
+    fontSize: SIZES.small,
   },
 });
 

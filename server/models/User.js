@@ -26,12 +26,55 @@ const UserSchema = new Schema({
     required: true,
     min: 1
   },
+  profilePicture: {
+    type: String,
+    default: 'https://via.placeholder.com/150'
+  },
   role: {
     type: String,
-    enum: ['patient', 'physiotherapist'],
+    enum: ['client', 'Client', 'physio', 'Physio', 'CLIENT', 'PHYSIO'],
     required: true
   },
+  // Fields specific to physio role
+  specialties: {
+    type: [String],
+    default: []
+  },
+  qualifications: {
+    type: [String],
+    default: []
+  },
+  // Fields specific to client role
+  medicalConditions: {
+    type: [String],
+    default: []
+  },
+  // User settings
+  settings: {
+    notificationsEnabled: {
+      type: Boolean,
+      default: true
+    },
+    darkMode: {
+      type: Boolean,
+      default: false
+    },
+    language: {
+      type: String,
+      default: 'en'
+    }
+  },
+  // Connection management
+  connections: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  // Timestamps
   createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
     type: Date,
     default: Date.now
   }

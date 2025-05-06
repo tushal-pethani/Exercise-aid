@@ -3,6 +3,7 @@ import { StatusBar, LogBox } from 'react-native';
 import { AuthProvider } from './context/AuthContext';
 import AppNavigator from './navigation/AppNavigator';
 import { COLORS } from './utils/theme';
+import { BluetoothProvider } from './context/BluetoothContext';
 
 // Ignore specific warnings
 LogBox.ignoreLogs([
@@ -13,8 +14,10 @@ LogBox.ignoreLogs([
 const App = () => {
   return (
     <AuthProvider>
+      <BluetoothProvider>
       <StatusBar backgroundColor={COLORS.primary} barStyle="dark-content" />
       <AppNavigator />
+      </BluetoothProvider>
     </AuthProvider>
   );
 };
